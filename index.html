@@ -1,0 +1,690 @@
+<html>
+	<head>
+		<script>
+			var enemy1 = document.createElement("img");
+			enemy1.src = "./enemy.png";
+			var enemy2 = document.createElement("img");
+			enemy2.src = "./enemy2.png";
+			var hero = document.createElement("img");
+			hero.src = "./hero.png";
+
+			var tip = document.createElement("img");
+			tip.src = "./tip.png";
+			var log = document.createElement("img");
+			log.src = "./log.png";
+			var bottom = document.createElement("img");
+			bottom.src = "./bottom.png";
+
+			var floorimg = document.createElement("img");
+			floorimg.src = "./floor.png";
+
+			var bossimg = document.createElement("img");
+			bossimg.src = "./boss.png";
+			var bosshurtimg = document.createElement("img");
+			bosshurtimg.src = "./boss_hurt.png";
+
+			var bulletSmallRight = document.createElement("img");
+			bulletSmallRight.src = "./bull_right.png"
+			var bulletLargeRight = document.createElement("img");
+			bulletLargeRight.src = "./bullet_left_super.png"
+			var bulletUp = document.createElement("img");
+			bulletUp.src = "./bullet_up.png"
+
+			var sndPlayeDeath = document.createElement("audio");
+			sndPlayeDeath.src = "./player_death.wav";
+			var sndBossHurt = document.createElement("audio");
+			sndBossHurt.src = "./boss_hurt.wav";
+			var sndShoot2 = document.createElement("audio");
+			sndShoot2.src = "./shoot2.wav";
+			var sndShoot1 = document.createElement("audio");
+			sndShoot1.src = "./shoot1.wav";
+			var sndExplosion = document.createElement("audio");
+			sndExplosion.src = "./explosion.wav";
+			var sndJump = document.createElement("audio");
+			sndJump.src = "./jump.wav";
+			var sndPowerup = document.createElement("audio");
+			sndPowerup.src = "./next_stage.wav";
+
+			var canvas, ctx;
+			var world = {}
+			var player, boss, floor;
+			var keyArray = [];
+			var keyPressed = [];
+			var curTime, dTime, prevTime, eTime;
+			var lSpawn = 0;
+			var gameState = 0;
+			var score = 0;
+			var jumpButtons = [];
+			var shootButtons = [];
+			world.entities = [];
+			world.Entity = function Entity() {
+				this.id = (new Date()).getTime() + (Math.random() * 10000).toFixed(0);
+				this.components = {};
+			}
+			world.Entity.prototype = {
+				addComponent : function(_c) {
+					this.components[_c.name] = _c;
+					this.components[_c.name].entity = this;
+				},
+				gC : function(_s) {
+					return this.components[_s];
+				}
+			}
+			world.components = {}
+			world.components.KeyboardControlled = function KeyboardControlled() {};
+			world.components.KeyboardControlled.prototype.name = "keyboardcontrolled";
+			world.components.Position = function Position(_x, _y) {
+				this.x = _x;
+				this.y = _y;
+			}
+			world.components.Position.prototype.name = "position";
+			world.components.Physics = function Physics() {
+				this.xVel = 0;
+				this.yVel = 0;
+				this.xAcc = 0;
+				this.yAcc = 0;
+				this.gravity = 8;
+				this.drag = 0;
+				this.state = "falling";
+			}
+			world.components.Physics.prototype.name = "physics";
+
+			world.components.Collider = function Collider(_type) {
+				this.type = _type;
+				this.width = 20;
+				this.height = 20;
+			}
+			world.components.Collider.prototype.name = "collider";
+			world.components.SlidesLeft = function SlidesLeft() {
+
+			}
+			world.components.SlidesLeft.prototype.name = "slidesleft";
+			world.components.SlidesRight = function SlidesRight() {
+
+			}
+			world.components.SlidesRight.prototype.name = "slidesright";
+
+			world.components.AttacksUp = function AttacksUp() {
+
+			}
+			world.components.AttacksUp.prototype.name = "attacksup";
+			world.components.SlidesUp = function SlidesUp() {
+
+			}
+			world.components.SlidesUp.prototype.name = "slidesup";
+			
+
+			world.components.Allied = function Allied(_team) {
+				this.team = _team;
+			}
+			world.components.Allied.prototype.name = "allied";
+			world.components.Armored = function Armored() {
+				this.isArmored = true;
+
+			}
+			world.components.Armored.prototype.name = "armored";
+			world.components.ChargeShot = function ChargeShot() {
+
+			}
+			world.components.ChargeShot.prototype.name = "chargeshot"
+
+			world.components.Boss = function Boss() {
+				this.damageTaken = 0;
+				this.stage = 1;
+			}
+			world.components.Boss.prototype.name = "boss";
+			world.components.Sprite = function Sprite(_sprite) {
+				this.sprite = _sprite;
+			}
+			world.components.Sprite.prototype.name = "sprite";
+
+
+
+			function createObstacle(_height) {
+				var obs = new world.Entity();
+				obs.addComponent(new world.components.Position(canvas.width + 20, canvas.height * 2 / 3 - 20 - 20 * _height));
+				obs.addComponent(new world.components.Collider("static"));
+				obs.addComponent(new world.components.SlidesLeft());
+				world.entities.push(obs);
+				return obs;
+			}
+			function createEnemy() {
+				var enemy = new world.Entity();
+				enemy.addComponent(new world.components.Position(canvas.width + 20, canvas.height * 2 / 3 - 20));
+				var a = Math.floor(Math.random() * 3);
+				if(a == 0) {
+					enemy.addComponent(new world.components.Armored());
+					enemy.addComponent(new world.components.Sprite(enemy2));
+				} else {
+					enemy.addComponent(new world.components.Sprite(enemy1));
+				}
+				enemy.addComponent(new world.components.Collider("static"));
+				enemy.addComponent(new world.components.SlidesLeft());
+				enemy.addComponent(new world.components.Allied("enemy"));
+				enemy.addComponent(new world.components.AttacksUp());
+
+				world.entities.push(enemy);
+			}
+			function initGame() {
+				prevTime = (new Date()).getTime();
+				eTime = 0;
+				lSpawn = -1000;
+				score = 0;
+
+				jumpButtons = [75]
+				shootButtons = [68]
+
+				player = new world.Entity();
+				player.addComponent(new world.components.KeyboardControlled());
+				player.addComponent(new world.components.Position(100, 100));
+				player.addComponent(new world.components.Physics());
+				player.addComponent(new world.components.Collider("dynamic"));
+				player.addComponent(new world.components.Sprite(hero));
+				world.entities.push(player);
+
+
+				floor = new world.Entity();
+				floor.addComponent(new world.components.Position(0, canvas.height * 2 / 3));
+				floorCollider = new world.components.Collider("static");
+				floorCollider.width = canvas.width;
+				floorCollider.height = 100;
+				floor.addComponent(floorCollider);
+				world.entities.push(floor);
+
+
+				boss = new world.Entity();
+				boss.addComponent(new world.components.Position(canvas.width - 100, canvas.height / 3));
+				var bossCollider = new world.components.Collider("static");
+				bossCollider.width = 100;
+				bossCollider.height = canvas.height * 2 / 3;
+				boss.addComponent(bossCollider);
+				boss.addComponent(new world.components.Boss());
+				world.entities.push(boss);
+				lTest = (new Date()).getTime()
+				for(var i = 0; i < canvas.width / 20 + 5; i++) {
+					var afloor = new world.Entity();
+					afloor.addComponent(new world.components.Position(0 + i * 20, canvas.height * 2 / 3));
+					afloor.addComponent(new world.components.SlidesLeft());
+					afloor.addComponent(new world.components.Sprite(floorimg));
+					world.entities.push(afloor);
+				}
+			}
+			function init() {
+				canvas = document.getElementById("aCanvas");
+				canvas.width = window.innerWidth;
+				canvas.height = window.innerHeight;
+				ctx = canvas.getContext("2d");
+				
+				
+				window.onkeydown = function(_e) {
+					if(!keyPressed[_e.keyCode]) {
+						keyArray[_e.keyCode] = true;
+					}
+					keyPressed[_e.keyCode] = true;
+					if(keyArray[82] || keyArray[74]) {
+						//Gotta be able to refresh and open the console!
+						return true;
+					}
+					return false;
+				}
+				window.onkeyup = function(_e) {
+					keyPressed[_e.keyCode] = false;
+					keyArray[_e.keyCode] = false;
+				}
+
+				
+				setInterval(main, 10);
+			}
+			function canShoot() {
+				for(var i = 0; i < shootButtons.length; i++) {
+					if(!keyArray[shootButtons[i]]) return false
+				}
+				return true;
+			}
+			function main() {
+				switch(gameState) {
+					case 0:
+						ctx.clearRect(0, 0, canvas.width, canvas.height);
+						ctx.save();
+						ctx.textBaseline = "middle";
+						ctx.textAlign = "center";
+						ctx.font = "24px monospace";
+						ctx.fillText("Press the Jump/Shoot buttons to survive.", canvas.width / 2, canvas.height / 2 - 100);
+						ctx.fillText("Deal substantial damage to the boss to advance stages!", canvas.width / 2, canvas.height / 2 - 50);
+						ctx.fillText("Press Space to Begin!", canvas.width / 2, canvas.height / 2);
+						ctx.restore();
+						if(keyArray[32]) {
+							world.entities = [];
+							gameState = 1;
+							initGame();
+						}
+						break;
+					case 1:
+						if((new Date()).getTime() - lTest > 32) {
+							var afloor = new world.Entity();
+							afloor.addComponent(new world.components.Position(canvas.width + 20, canvas.height * 2 / 3));
+							afloor.addComponent(new world.components.SlidesLeft());
+							afloor.addComponent(new world.components.Sprite(floorimg));
+							world.entities.push(afloor);
+							lTest = (new Date()).getTime();
+						}
+						if(lSpawn + 1000 < eTime) {
+							var type = Math.floor((Math.random() * 3))
+							lSpawn = eTime;
+							switch(type) {
+								case 0:
+									obs = createObstacle(0);
+									obs.addComponent(new world.components.Sprite(log));
+									obs = createObstacle(1);
+									obs.addComponent(new world.components.Sprite(log));
+									obs = createObstacle(2);
+									obs.addComponent(new world.components.Sprite(tip));
+									lSpawn += 250;
+									break;
+								case 1:
+									obs = createObstacle(0);
+									obs.addComponent(new world.components.Sprite(tip));
+									obs = createObstacle(5);
+									obs.addComponent(new world.components.Sprite(bottom));
+									break;
+								case 2:
+									createEnemy();
+									break;
+							}
+							
+							
+						}
+						collision();
+						control();
+						ai();
+						logic();
+						render();
+						break;
+					case 2:
+						if(keyArray[32]) {
+							keyArray[32] = false;
+							gameState = 0;
+						}
+						render();
+						ctx.save();
+						ctx.textBaseline = "middle";
+						ctx.textAlign = "center";
+						ctx.font = "24px monospace";
+						ctx.fillText("You lost!", canvas.width / 2, canvas.height / 2 - 100);
+						ctx.fillText("Final Score: " + score, canvas.width / 2, canvas.height / 2 - 50);
+						ctx.fillText("Press Space to start over!", canvas.width / 2, canvas.height / 2);
+						ctx.restore();
+						break;
+				}
+			}
+			var cTime = 0;
+			var sDown = false;
+			var sSTime = 0;
+			function control() {
+				var phy = player.gC("physics");
+				if(phy.state == "still") {
+					if(canJump()) {
+						sndJump.play();
+						cTime = 0;
+						phy.state = "jumping";
+						phy.gravity = 0;
+						phy.yVel = -256;
+					}
+				} else if (phy.state == "jumping") {
+					if(canJump()) {
+						cTime += dTime;
+						if(cTime > 250) {
+							phy.state = "falling";
+							phy.gravity = 8;
+						}
+					} else {
+						phy.state = "falling";
+						phy.gravity = 8;
+					}
+				}
+				//console.log(shootHeld());
+				//shootHeld();
+				if(canShoot()) {
+					disableShoot();
+					sSTime = (new Date()).getTime();
+					sDown = true;
+				} else if(sDown && !shootHeld()) {
+					shoot();
+					sDown = false;
+				} else {
+					sStime = (new Date()).getTime();
+				}
+			}
+			function disableShoot() {
+				for(var i = 0; i < shootButtons.length; i++) {
+					keyArray[shootButtons[i]] = false;
+				}
+			}
+			function shootHeld() {
+				for(var i = 0; i < shootButtons.length; i++) {
+					if(!keyPressed[shootButtons[i]]) {
+						return false;
+					}
+				}
+				return true;
+			}
+			function canJump() {
+				for(var i = 0; i < jumpButtons.length; i++) {
+					if(!keyArray[jumpButtons[i]]) return false;
+				}
+				return true;
+			}
+			function shoot() {
+				var pos = player.gC("position");
+				var bullet = new world.Entity();
+				sndShoot1.play();
+				if((new Date).getTime() - sSTime > 500) {
+					bullet.addComponent(new world.components.ChargeShot());
+					bullet.addComponent(new world.components.Sprite(bulletLargeRight));
+				} else {
+					bullet.addComponent(new world.components.Sprite(bulletSmallRight));
+				}
+				bullet.addComponent(new world.components.Position(pos.x, pos.y));
+				bullet.addComponent(new world.components.SlidesRight());
+				bullet.addComponent(new world.components.Collider("dynamic"));
+				world.entities.push(bullet);
+			}
+			function ai() {
+				for(var i = 0; i < world.entities.length; i++) {
+					var e = world.entities[i];
+					var pos = e.gC("position");
+					var shoots = e.gC("attacksup");
+					if(shoots) {
+						if(!shoots.lastShot) {
+							shoots.lastShot = (new Date()).getTime();
+							shootUp(pos);
+						} else if (shoots.lastShot + 1000 < (new Date()).getTime()) {
+							shoots.lastShot = (new Date()).getTime();
+							shootUp(pos);
+						} else if (shoots.lastShot + 100 < (new Date()).getTime() && pos.x < player.gC("position").x + 20) {
+							shoots.lastShot = (new Date()).getTime();
+							shootUp(pos);
+						}
+					}
+				}
+				if(boss.gC("boss").damageTaken >= 1000 * Math.sqrt(boss.gC("boss").stage)) {
+					boss.gC("boss").damageTaken = 0;
+					boss.gC("boss").stage += 1;
+					var nextButton = Object.keys(keyboardArray)[Math.floor(Math.random() * Object.keys(keyboardArray).length)];
+					while(!(shootButtons.indexOf(nextButton) == -1 || jumpButtons.indexOf(nextButton) == -1)) {
+						nextButton = Object.keys(keyboardArray)[Math.floor(Math.random() * Object.keys(keyboardArray).length)];
+					}
+					if(shootButtons.length > jumpButtons.length) {
+						jumpButtons.push(nextButton);
+					} else if (shootButtons.length < jumpButtons.length) {
+						shootButtons.push(nextButton);
+					} else {
+						var whichArray = Math.floor(Math.random() * 2);
+						if(whichArray == 0) {
+							shootButtons.push(nextButton);
+						} else {
+							jumpButtons.push(nextButton);
+						}
+					}
+					sndPowerup.play();
+					for(var i = world.entities.length - 1; i >= 0; i--) {
+						if(world.entities[i] != boss && world.entities[i] != player && world.entities[i] != floor) {
+							world.entities.splice(i, 1);
+						}
+					}
+					lTest = (new Date()).getTime()
+					for(var i = 0; i < canvas.width / 20 + 5; i++) {
+						var afloor = new world.Entity();
+						afloor.addComponent(new world.components.Position(0 + i * 20, canvas.height * 2 / 3));
+						afloor.addComponent(new world.components.SlidesLeft());
+						afloor.addComponent(new world.components.Sprite(floorimg));
+						world.entities.push(afloor);
+					}
+					//console.log("Owe!");
+				}
+			}
+			function shootUp(_where) {
+				var bullet = new world.Entity();
+				sndShoot2.play();
+				bullet.addComponent(new world.components.Position(_where.x, _where.y - 20));
+				bullet.addComponent(new world.components.Sprite(bulletUp));
+				bullet.addComponent(new world.components.Collider("static"));
+				bullet.addComponent(new world.components.SlidesUp());
+				world.entities.push(bullet);
+			}
+			/*
+				Note to whoever looks at this code:
+				THIS IS BAD COLLISION DETECTION
+				It works, but in this very specific instance.
+				My terminology "dynamic" and "static" turned into "goodguys"/"enemies".
+				I think.
+
+				...
+			*/
+			function collision() {
+				var sCol = [];
+				var dCol = [];
+				for(var i = 0; i < world.entities.length; i++) {
+					var e = world.entities[i];
+					var col = e.gC("collider");
+					if(col) {
+						if(col.type == "static") {
+							sCol.push(e);
+						} else if (col.type == "dynamic") {
+							dCol.push(e);
+						}
+					}
+				}
+				for(var i = 0; i < dCol.length; i++) {
+					var e = dCol[i];
+					var col = e.gC("collider");
+					var pos = e.gC("position");
+					var kb = e.gC("keyboardcontrolled");
+					var slide2 = e.gC("slidesright");
+					for(var j = 0; j < sCol.length; j++) {
+						var e2 = sCol[j];
+						var col2 = e2.gC("collider");
+						var pos2 = e2.gC("position");
+						var slide = e2.gC("slidesleft");
+						var slide3 = e2.gC("slidesup");
+						var team = e2.gC("allied");
+						var ar = e2.gC("armored");
+						var bo = e2.gC("boss");
+						if(rrCollision(pos, col, pos2, col2)) {
+							if(kb && slide || kb && slide3) {
+								keyArray = [];
+								gameState = 2;
+								sndPlayeDeath.play();
+							} else if(slide2) {
+								world.entities.splice(world.entities.indexOf(e), 1);
+								if(team) {
+
+									if(ar && ar.isArmored) {
+										ar.isArmored = false;
+										e2.gC("sprite").sprite = enemy1;
+									} else {
+										world.entities.splice(world.entities.indexOf(e2), 1);
+										sndExplosion.play();
+									}
+								} else if (bo) {
+									score += jumpButtons.length * shootButtons.length;
+									sndBossHurt.play();
+									bo.damageTaken += 100;
+									e2.isHurt = true;
+									e2.isHurtTime = (new Date()).getTime();
+								}
+								break;
+							}else {
+								var phy = e.gC("physics");
+								phy.state = "still";
+								pos.y = pos2.y - col.height;
+							}
+						}
+					}
+				}
+			}
+			function rrCollision(_pos1, _dim1, _pos2, _dim2) {
+				if(_pos1.x < _pos2.x + _dim2.width && _pos1.x + _dim1.width > _pos2.x && _pos1.y < _pos2.y + _dim2.height && _pos1.y + _dim1.height > _pos2.y) {
+					return true;
+				}
+				return false;
+			}
+			function logic() {
+				curTime = (new Date()).getTime();
+				dTime = curTime - prevTime;
+				dTime;
+				//score += dTime / 100;
+				eTime += dTime;
+				//console.log("???");
+				for(var i = 0; i < world.entities.length; i++) {
+					var e = world.entities[i];
+					var pos = e.gC("position");
+					var phy = e.gC("physics");
+					var slide = e.gC("slidesleft");
+					var slide2 = e.gC("slidesright");
+					var slide3 = e.gC("slidesup");
+					if(phy) {
+						if(phy.state == "falling") {
+							phy.yAcc = phy.gravity;
+							phy.yVel += phy.yAcc;
+							pos.y += phy.yVel * dTime / 1000;
+						} else if (phy.state == "jumping") {
+							phy.yAcc = phy.gravity;
+							phy.yVel += phy.yAcc;
+							pos.y += phy.yVel * dTime / 1000;
+						}
+					} else if (slide) {
+						pos.x += -128 * dTime / 1000 * (window.innerWidth / 800);
+						if(pos.x < -100) {
+							world.entities.splice(i, 1);
+							i--;
+						}
+					} else if (slide2) {
+
+						pos.x += 512 * dTime / 1000 * (window.innerWidth / 800);
+						if(pos.x > canvas.width + 100) {
+							world.entities.splice(i, 1);
+							i--;
+						}
+					} else if (slide3) {
+						pos.y += -512 * dTime / 1000;
+					}
+				}
+				if(boss.isHurtTime + 250 < (new Date()).getTime()) {
+					boss.isHurt = false;
+				}
+				prevTime = curTime;
+			}
+			function render() {
+				ctx.clearRect(0, 0, canvas.width, canvas.height);
+				ctx.save();
+				ctx.fillStyle = "rgba(92, 174, 146, 1)"
+				ctx.fillRect(0, 0, canvas.width, canvas.height);
+				ctx.restore();
+				/*
+				var keyString = "";
+				for(var i = 0; i < keyArray.length; i++) {
+					if(keyArray[i]) {
+						keyString += i + " ";
+					}
+				}
+				ctx.fillText(keyString, 20, 20);
+				*/
+				for(var i = 0; i < world.entities.length; i++) {
+					var e = world.entities[i];
+					var pos = e.gC("position");
+					var ar = e.gC("armored");
+					var sprite = e.gC("sprite");
+					var boss2 = e.gC("boss");
+					if(pos) {
+						ctx.save();
+						if(ar && ar.isArmored) {
+							ctx.fillStyle = "blue";
+						}
+						if(!sprite) {
+							if(boss2) {
+
+							} else {
+								ctx.fillRect(pos.x, pos.y, 20, 20);
+							}
+						} else {
+							if(sprite.sprite.width <= 20) {
+								ctx.drawImage(sprite.sprite, 0, 0, 20, 20, pos.x, pos.y, 20, 20);
+							} else {
+								if(eTime % 1000 < 500) {
+									ctx.drawImage(sprite.sprite, 0, 0, 20, 20, pos.x, pos.y, 20, 20);
+								} else {
+									ctx.drawImage(sprite.sprite, 20, 0, 20, 20, pos.x, pos.y, 20, 20);
+								}
+							}
+						}
+						ctx.restore();
+					}
+					/*
+					var col = e.gC("collider");
+					if(col) {
+						ctx.save();
+						ctx.strokeStyle = "red";
+						ctx.strokeRect(pos.x, pos.y, col.width, col.height);
+						ctx.restore();
+					}
+					*/
+				}
+				if(sDown && (new Date).getTime() - sSTime > 500) {
+					ctx.fillRect(player.gC("position").x + 20, player.gC("position").y + 5, 5, 5)
+				}
+				var scale = boss.gC("boss").stage;
+				if(boss.isHurt) {
+					ctx.drawImage(bosshurtimg, boss.gC("position").x - 25 * scale, boss.gC("position").y + canvas.height/ 5 - 25 * scale, 200 + 50 * scale, 200+ 50 * scale);
+				} else {
+					ctx.drawImage(bossimg, boss.gC("position").x - 25 * scale, boss.gC("position").y + canvas.height/ 5 - 25 * scale, 200 + 50 * scale, 200 + 50 * scale);
+				}
+				ctx.save();
+				ctx.textBaseline = "middle";
+				ctx.textAlign = "center";
+				ctx.font = "36px monospace";
+				ctx.fillText("Shoot", canvas.width / 3, canvas.height * 3 / 4);
+				ctx.fillText("Jump", canvas.width*2 / 3, canvas.height * 3 / 4);
+				ctx.fillText("Score", canvas.width/2, canvas.height * 3 / 4);
+				ctx.fillText(score.toFixed(0), canvas.width/2, canvas.height * 3 / 4  + 50);
+				for(var i = 0; i < shootButtons.length; i++) {
+					var off = ((shootButtons.length) % 2)
+					var mid = (shootButtons.length - off) / 2
+					if(off == 0) {
+						off = 1
+					}
+					else if(off == 1) {
+						off = 0;
+					}
+					//console.log(off);
+					ctx.fillText(keyboardArray[shootButtons[i]], canvas.width / 3 - 36 * i + mid * 36 - off * 16, canvas.height * 7 / 8);
+				}
+				for(var i = 0; i < jumpButtons.length; i++) {
+					var off = ((jumpButtons.length) % 2)
+					var mid = (jumpButtons.length - off) / 2
+					if(off == 0) {
+						off = 1
+					}
+					ctx.fillText(keyboardArray[jumpButtons[i]], canvas.width* 2 / 3 - 36 * i + mid * 36 - off * 16, canvas.height * 7 / 8);
+				}
+				ctx.restore();
+				
+			}
+			var keyboardArray = {
+				65:"A", 66:"B", 67:"C", 68:"D", 69:"E", 70:"F", 71:"G", 72:"H",
+				73:"I", 74:"J", 75:"K", 76:"L", 77:"M", 78:"N", 79:"O", 80:"P",
+				81:"Q", 82:"R", 83:"S", 84:"T", 85:"U", 86:"V", 87:"W", 88:"X",
+				89:"Y", 90:"Z"
+			}
+		</script>
+	</head>
+	<body onload="init()">
+		<canvas id="aCanvas"></canvas>
+	</body>
+</html>
+<style>
+	* {
+		padding: 0;
+		margin: 0;
+	}
+</style>
